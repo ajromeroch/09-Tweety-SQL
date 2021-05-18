@@ -1,8 +1,6 @@
 "use strict";
 var express = require("express");
 var router = express.Router();
-var tweetBank = require("../tweetBank");
-
 const client = require("../db");
 
 module.exports = router;
@@ -44,17 +42,44 @@ router.get("/users/:username", function (req, res, next) {
 
 // página del tweet individual
 router.get("/tweets/:id", function (req, res, next) {
-	var tweetsWithThatId = tweetBank.find({ id: Number(req.params.id) });
-	res.render("index", {
-		title: "Twitter.js",
-		tweets: tweetsWithThatId, // un arreglo de solo un elemento ;-)
-	});
+	client.query("SELECT tweets.content FROM tweets WHERE tweets.id = $1", [req.params.id], (err, data) => {
+		if(err) return next(err);
+		var tweetsWithThatId = data.rows;
+		res.render("index", {
+			title: "Twitter.js",
+			tweets: tweetsWithThatId, // un arreglo de solo un elemento ;-)
+		});
+	})
 });
 
 // crear un nuevo tweet
 router.post("/tweets", function (req, res, next) {
-	var newTweet = tweetBank.add(req.body.name, req.body.content);
-	res.redirect("/");
+	const variables = [req.body.name, req.body.content]
+	const exist = client.query('SELECT * FROM users WHERE users.name = $1', [variables[0]], (err, data) => {
+		if(err) return next(err);
+		return data.rows.length !== 0;
+	})
+	if(exist){
+		client.query("INSERT INTO tweets (user_id, content) VALUES ((SELECT id from users where name = $1), $2)", variables, (err, data) => {
+			if(err) return next(err);
+			res.redirect("/");
+		})
+	} else {
+		//
+		client.query("INSERT INTO users (name, picture_url) VALUES ($1, 'http://i.imgur.com/JKInSVz.jpg');", [variables[0]], (err, data) => {
+			if(err) return next(err);
+		})
+
+		client.query("INSERT INTO tweets (user_id, content) VALUES ((SELECT id from users where name = $1), $2)", variables, (err, data) => {
+			if(err) return next(err);
+			res.redirect("/");
+		})
+	}
+
+
+
+
+	//INSERT INTO tweets (user_id, content) VALUES ((SELECT id from users where name='Kanye West'),          'I think what Kanye West is going to mean is something similar to what Steve Jobs means.');
 });
 
 // // reemplazá esta ruta hard-codeada con static routing general en app.js
